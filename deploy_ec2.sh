@@ -24,7 +24,7 @@ TEMPLATE="$HERE/userdata.template.sh"
 # 1. collect endpoints test1..test20 (must be available)
 declare -A EP
 for i in $(seq 1 $NPROBES); do
-  name="LW-EC-serverless-test${i}"
+  name="lw-ec-serverless-test${i}"
   addr=$(aws elasticache describe-serverless-caches --serverless-cache-name "$name" --region "$REGION" \
           --query 'ServerlessCaches[0].Endpoint.Address' --output text 2>/dev/null || echo None)
   if [ "$addr" = "None" ] || [ -z "$addr" ]; then
