@@ -43,12 +43,14 @@ done
 DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
 TEXT="【Redis Serverless 长跑日报】\n实例: ${EC2_ID} (${PUB_IP})\n时间: ${DATE}\n${SUMMARY}"
 
-# Build JSON safely via python (handles quoting/escaping)
+# Build JSON safely via python (handles quoting/escaping).
+# NOTE: 不能用 unicode_escape，它会把 UTF-8 中文按 Latin-1 曲解成乱码。
+# 只需把字面 \n 还原为真实换行，并 ensure_ascii=False 保留 UTF-8。
 PAYLOAD=$(python3 -c '
 import json, sys
-text = sys.argv[1].encode().decode("unicode_escape")
-print(json.dumps({"msg_type":"text","content":{"text":text}}))
+text = sys.argv[1].replace("\\n", "\n")
+print(json.dumps({"msg_type":"text","content":{"text":text}}, ensure_ascii=False))
 ' "$TEXT")
 
-curl -s -X POST "$WEBHOOK" -H "Content-Type: application/json" -d "$PAYLOAD"
+curl -s -X POST "$WEBHOOK" -H "Content-Type: application/json; charset=utf-8" --data-binary "$PAYLOAD"
 echo "report sent at $(date -u)"
