@@ -13,6 +13,8 @@ SUMMARY=""
 for LOG in "$LOGDIR"/*.log; do
   [ -e "$LOG" ] || continue
   NAME=$(basename "$LOG" .log)
+  # skip cron's own report.log (not a probe log)
+  case "$NAME" in report) continue;; esac
   # last METRICS line = cumulative totals
   LAST=$(grep "^METRICS" "$LOG" | tail -1 || true)
   # disconnect events in last 24h
