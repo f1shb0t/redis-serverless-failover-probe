@@ -3,6 +3,11 @@
 # Runs at 09:30 Beijing time (= 01:30 UTC) via cron.
 set -euo pipefail
 
+# Jitter: 10 台 EC2 的 cron 都在 01:30:00 同一秒触发，会撞飞书自定义机器人限流
+# (code 11232 frequency limited / 9499 too many request)。随机 sleep 0~89s 把发送
+# 时间打散到 01:30–01:31 的窗口，避免同秒并发。
+sleep $(( RANDOM % 90 ))
+
 WEBHOOK="https://open.feishu.cn/open-apis/bot/v2/hook/108bd68c-3aa0-4b43-b161-2589acbc9d6b"
 LOGDIR="/opt/redisprobe/logs"
 EC2_ID=$(curl -s -H "X-aws-ec2-metadata-token: $(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')" http://169.254.169.254/latest/meta-data/instance-id || echo unknown)
