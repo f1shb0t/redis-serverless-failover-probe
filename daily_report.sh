@@ -34,38 +34,10 @@ else
 fi
 sleep "$DELAY"
 
-# Build summary for each probe log on this box
-SUMMARY=""
-for LOG in "$LOGDIR"/*.log; do
-  [ -e "$LOG" ] || continue
-  PNAME=$(basename "$LOG" .log)
-  # skip cron's own report.log (not a probe log)
-  case "$PNAME" in report) continue;; esac
-  # last METRICS line = cumulative totals
-  LAST=$(grep "^METRICS" "$LOG" | tail -1 || true)
-  # disconnect events in last 24h
-  DISC_LINES=$(grep "^DISCONNECT_RECOVERED" "$LOG" | tail -10 || true)
-
-  # parse fields from LAST
-  getf() { echo "$LAST" | tr ' ' '\n' | grep "^$1=" | cut -d= -f2 || echo "-"; }
-  WOK=$(getf writeOk); WFAIL=$(getf writeFail); ROK=$(getf readOk); RFAIL=$(getf readFail)
-  WP50=$(getf wP50us); WP99=$(getf wP99us); RP50=$(getf rP50us); RP99=$(getf rP99us)
-  HOST=$(getf host); DC=$(getf disconnects)
-
-  SUMMARY="${SUMMARY}\n▶ Redis [${PNAME}] (${HOST})\n"
-  SUMMARY="${SUMMARY}  写: 成功 ${WOK} / 失败 ${WFAIL}  |  读: 成功 ${ROK} / 失败 ${RFAIL}\n"
-  SUMMARY="${SUMMARY}  写延迟 p50/p99: ${WP50}/${WP99} µs  |  读延迟 p50/p99: ${RP50}/${RP99} µs\n"
-  SUMMARY="${SUMMARY}  断联次数: ${DC:-0}\n"
-  if [ -n "$DISC_LINES" ]; then
-    SUMMARY="${SUMMARY}  最近断联事件:\n"
-    while IFS= read -r ln; do
-      st=$(echo "$ln" | tr ' ' '\n' | grep '^start=' | cut -d= -f2)
-      en=$(echo "$ln" | tr ' ' '\n' | grep '^end=' | cut -d= -f2)
-      du=$(echo "$ln" | tr ' ' '\n' | grep '^durationMs=' | cut -d= -f2)
-      SUMMARY="${SUMMARY}    - ${st} → ${en}  (${du} ms)\n"
-    done <<< "$DISC_LINES"
-  fi
-done
+# Build summary via python (跨进程重启做真累计 + 断联归因)
+# v1 的 bug：直接读最后一条 METRICS 的 disconnects=，那是 JVM 进程内计数器，
+# 进程被 OOM kill / 机器重启后归零 → 出现「断联次数: 0」却列了断联事件的自相矛盾。
+SUMMARY=$(PROBE_LOGDIR="$LOGDIR" python3 /opt/redisprobe/summarize.py 2>&1 || echo "  ! summarize.py 执行失败")
 
 DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
 TEXT="【Redis Serverless 长跑日报】\n实例: ${EC2_ID} (${PUB_IP})\n时间: ${DATE}\n${SUMMARY}"
