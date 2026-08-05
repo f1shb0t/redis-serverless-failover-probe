@@ -6,3 +6,5 @@ logs/
 
 # local
 *.tmp
+__pycache__/
+*.v1.bak

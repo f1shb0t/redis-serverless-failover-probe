@@ -14,6 +14,20 @@ REDIS_PORT=6379
 dnf install -y java-11-openjdk-devel curl unzip cronie
 systemctl enable --now crond
 
+# --- 1b. OOM 加固（08-03 事后手动做过，此处回写模板固化）---
+# t3.micro 仅 717MB，dnf 自动补丁的内存峰值会触发 global OOM，
+# 内核默认挑 RSS 最大的 java(probe) 杀。加 1GB swap + 降低 probe 的 oom_score_adj，
+# 让 OOM 优先杀 dnf/yum 而非 probe，避免 probe 被误杀导致假断联。
+if ! swapon --show | grep -q /swapfile; then
+  fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+sysctl -w vm.swappiness=10
+echo 'vm.swappiness=10' > /etc/sysctl.d/99-swappiness.conf
+
 mkdir -p /opt/redisprobe/lib /opt/redisprobe/logs
 cd /opt/redisprobe
 
@@ -49,6 +63,7 @@ After=network-online.target
 ExecStart=/usr/bin/java -Xmx256m -cp "/opt/redisprobe:/opt/redisprobe/lib/*" RedisProbe ${REDIS_A_HOST} ${REDIS_PORT} ${REDIS_A_NAME} /opt/redisprobe/logs/${REDIS_A_NAME}.log
 Restart=always
 RestartSec=5
+OOMScoreAdjust=-500
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -61,6 +76,7 @@ After=network-online.target
 ExecStart=/usr/bin/java -Xmx256m -cp "/opt/redisprobe:/opt/redisprobe/lib/*" RedisProbe ${REDIS_B_HOST} ${REDIS_PORT} ${REDIS_B_NAME} /opt/redisprobe/logs/${REDIS_B_NAME}.log
 Restart=always
 RestartSec=5
+OOMScoreAdjust=-500
 [Install]
 WantedBy=multi-user.target
 EOF
